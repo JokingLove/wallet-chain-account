@@ -17,7 +17,7 @@ func IsURLAvailable(address string) bool {
 		case "http", "ws":
 			addr += ":80"
 		case "https", "wss":
-			addr += "443"
+			addr += ":443"
 		default:
 			return true
 		}

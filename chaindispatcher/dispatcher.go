@@ -6,13 +6,14 @@ import (
 	"strings"
 
 	"github.com/JokingLove/wallet-chain-account/chain"
+	"github.com/JokingLove/wallet-chain-account/chain/ethereum"
 	"github.com/JokingLove/wallet-chain-account/config"
 	"github.com/JokingLove/wallet-chain-account/rpc/account"
 	"github.com/JokingLove/wallet-chain-account/rpc/common"
 	"github.com/ethereum/go-ethereum/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/internal/status"
+	"google.golang.org/grpc/status"
 )
 
 type CommonRequest interface {
@@ -24,19 +25,21 @@ type CommonReply = account.SupportChainsResponse
 type ChainType = string
 
 type ChainDispatcher struct {
-	registry map[ChainType]chain.ChainsAdaptor
+	registry map[ChainType]chain.IChainsAdaptor
 }
 
 func New(conf *config.Config) (*ChainDispatcher, error) {
 	dispatcher := ChainDispatcher{
-		registry: make(map[ChainType]chain.ChainsAdaptor),
+		registry: make(map[ChainType]chain.IChainsAdaptor),
 	}
-	chainAdaptorFactoryMap := map[string]func(conf *config.Config) (chain.ChainsAdaptor, error){
+	chainAdaptorFactoryMap := map[string]func(conf *config.Config) (chain.IChainsAdaptor, error){
 		// add support chain
+		ethereum.ChainName: ethereum.NewChainAdaptor,
 	}
 
 	supportedChains := []string{
 		// addd support chain name
+		ethereum.ChainName,
 	}
 
 	for _, c := range conf.Chains {
@@ -53,12 +56,12 @@ func New(conf *config.Config) (*ChainDispatcher, error) {
 	return &dispatcher, nil
 }
 
-func (d *ChainDispatcher) Interceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) {
+func (d *ChainDispatcher) Interceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			log.Error("panic error ", "msg", e)
 			log.Debug(string(debug.Stack()))
-			err := status.Errorf(codes.Internal, "Panic err: %v", e)
+			err = status.Errorf(codes.Internal, "Panic err: %v", e)
 		}
 	}()
 
@@ -67,7 +70,7 @@ func (d *ChainDispatcher) Interceptor(ctx context.Context, req interface{}, info
 	chainName := req.(CommonRequest).GetChain()
 	log.Info(string(method), "chain", chainName, "req", req)
 
-	resp, err := handler(ctx, req)
+	resp, err = handler(ctx, req)
 	log.Debug("Finish handling", "resp", resp, "err", err)
 
 	return
@@ -96,7 +99,7 @@ func (d *ChainDispatcher) GetSupportChains(ctx context.Context, request *account
 	return d.registry[request.Chain].GetSupportChains(request)
 }
 
-func (d *ChainDispatcher) ConvertAddress(req *account.ConvertAddressRequest) (*account.ConvertAddressResponse, error) {
+func (d *ChainDispatcher) ConvertAddress(ctx context.Context, req *account.ConvertAddressRequest) (*account.ConvertAddressResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.ConvertAddressResponse{
@@ -107,7 +110,7 @@ func (d *ChainDispatcher) ConvertAddress(req *account.ConvertAddressRequest) (*a
 	return d.registry[req.Chain].ConvertAddress(req)
 }
 
-func (d *ChainDispatcher) ValidAddress(req *account.ValidAddressRequest) (*account.ValidAddressResponse, error) {
+func (d *ChainDispatcher) ValidAddress(ctx context.Context, req *account.ValidAddressRequest) (*account.ValidAddressResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.ValidAddressResponse{
@@ -118,7 +121,7 @@ func (d *ChainDispatcher) ValidAddress(req *account.ValidAddressRequest) (*accou
 	return d.registry[req.Chain].ValidAddress(req)
 }
 
-func (d *ChainDispatcher) GetBlockByNumber(req *account.BlockNumberRequest) (*account.BlockResponse, error) {
+func (d *ChainDispatcher) GetBlockByNumber(ctx context.Context, req *account.BlockNumberRequest) (*account.BlockResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.BlockResponse{
@@ -129,7 +132,7 @@ func (d *ChainDispatcher) GetBlockByNumber(req *account.BlockNumberRequest) (*ac
 	return d.registry[req.Chain].GetBlockByNumber(req)
 }
 
-func (d *ChainDispatcher) GetBlockByHash(req *account.BlockHashRequest) (*account.BlockResponse, error) {
+func (d *ChainDispatcher) GetBlockByHash(ctx context.Context, req *account.BlockHashRequest) (*account.BlockResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.BlockResponse{
@@ -140,7 +143,7 @@ func (d *ChainDispatcher) GetBlockByHash(req *account.BlockHashRequest) (*accoun
 	return d.registry[req.Chain].GetBlockByHash(req)
 }
 
-func (d *ChainDispatcher) GetBlockHeaderByHash(req *account.BlockHeaderHashRequest) (*account.BlockHeaderResponse, error) {
+func (d *ChainDispatcher) GetBlockHeaderByHash(ctx context.Context, req *account.BlockHeaderHashRequest) (*account.BlockHeaderResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.BlockHeaderResponse{
@@ -151,7 +154,7 @@ func (d *ChainDispatcher) GetBlockHeaderByHash(req *account.BlockHeaderHashReque
 	return d.registry[req.Chain].GetBlockHeaderByHash(req)
 }
 
-func (d *ChainDispatcher) GetBlockHeaderByNumber(req *account.BlockHeaderNumberRequest) (*account.BlockHeaderResponse, error) {
+func (d *ChainDispatcher) GetBlockHeaderByNumber(ctx context.Context, req *account.BlockHeaderNumberRequest) (*account.BlockHeaderResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.BlockHeaderResponse{
@@ -162,7 +165,7 @@ func (d *ChainDispatcher) GetBlockHeaderByNumber(req *account.BlockHeaderNumberR
 	return d.registry[req.Chain].GetBlockHeaderByNumber(req)
 }
 
-func (d *ChainDispatcher) GetBlockHeaderByRange(req *account.BlockByRangeRequest) (*account.BlockByRangeResponse, error) {
+func (d *ChainDispatcher) GetBlockHeaderByRange(ctx context.Context, req *account.BlockByRangeRequest) (*account.BlockByRangeResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.BlockByRangeResponse{
@@ -170,10 +173,10 @@ func (d *ChainDispatcher) GetBlockHeaderByRange(req *account.BlockByRangeRequest
 			Msg:  "get block header by range fail",
 		}, nil
 	}
-	return d.registry[req.Chain].GetBlockHeaderByRange(req)
+	return nil, nil
 }
 
-func (d *ChainDispatcher) GetAccount(req *account.AccountRequest) (*account.AccountResponse, error) {
+func (d *ChainDispatcher) GetAccount(ctx context.Context, req *account.AccountRequest) (*account.AccountResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.AccountResponse{
@@ -184,7 +187,7 @@ func (d *ChainDispatcher) GetAccount(req *account.AccountRequest) (*account.Acco
 	return d.registry[req.Chain].GetAccount(req)
 }
 
-func (d *ChainDispatcher) GetFee(req *account.FeeRequest) (*account.FeeResponse, error) {
+func (d *ChainDispatcher) GetFee(ctx context.Context, req *account.FeeRequest) (*account.FeeResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.FeeResponse{
@@ -195,7 +198,7 @@ func (d *ChainDispatcher) GetFee(req *account.FeeRequest) (*account.FeeResponse,
 	return d.registry[req.Chain].GetFee(req)
 }
 
-func (d *ChainDispatcher) SendTx(req *account.SendTxRequest) (*account.SendTxResponse, error) {
+func (d *ChainDispatcher) SendTx(ctx context.Context, req *account.SendTxRequest) (*account.SendTxResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.SendTxResponse{
@@ -206,7 +209,7 @@ func (d *ChainDispatcher) SendTx(req *account.SendTxRequest) (*account.SendTxRes
 	return d.registry[req.Chain].SendTx(req)
 }
 
-func (d *ChainDispatcher) GetTxByAddress(req *account.TxAddressRequest) (*account.TxAddressResponse, error) {
+func (d *ChainDispatcher) GetTxByAddress(ctx context.Context, req *account.TxAddressRequest) (*account.TxAddressResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.TxAddressResponse{
@@ -217,7 +220,7 @@ func (d *ChainDispatcher) GetTxByAddress(req *account.TxAddressRequest) (*accoun
 	return d.registry[req.Chain].GetTxByAddress(req)
 }
 
-func (d *ChainDispatcher) GetTxByHash(req *account.TxHashRequest) (*account.TxHashResponse, error) {
+func (d *ChainDispatcher) GetTxByHash(ctx context.Context, req *account.TxHashRequest) (*account.TxHashResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.TxHashResponse{
@@ -228,7 +231,7 @@ func (d *ChainDispatcher) GetTxByHash(req *account.TxHashRequest) (*account.TxHa
 	return d.registry[req.Chain].GetTxByHash(req)
 }
 
-func (d *ChainDispatcher) CreateUnSignTransaction(req *account.UnSignTransactionRequest) (*account.UnSignTransactionResponse, error) {
+func (d *ChainDispatcher) CreateUnSignTransaction(ctx context.Context, req *account.UnSignTransactionRequest) (*account.UnSignTransactionResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.UnSignTransactionResponse{
@@ -239,7 +242,7 @@ func (d *ChainDispatcher) CreateUnSignTransaction(req *account.UnSignTransaction
 	return d.registry[req.Chain].CreateUnSignTransaction(req)
 }
 
-func (d *ChainDispatcher) BuildSignedTransaction(req *account.SignedTransactionRequest) (*account.SignedTransactionResponse, error) {
+func (d *ChainDispatcher) BuildSignedTransaction(ctx context.Context, req *account.SignedTransactionRequest) (*account.SignedTransactionResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.SignedTransactionResponse{
@@ -250,7 +253,7 @@ func (d *ChainDispatcher) BuildSignedTransaction(req *account.SignedTransactionR
 	return d.registry[req.Chain].BuildSignedTransaction(req)
 }
 
-func (d *ChainDispatcher) DecodeTransaction(req *account.DecodeTransactionRequest) (*account.DecodeTransactionResponse, error) {
+func (d *ChainDispatcher) DecodeTransaction(ctx context.Context, req *account.DecodeTransactionRequest) (*account.DecodeTransactionResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.DecodeTransactionResponse{
@@ -261,7 +264,7 @@ func (d *ChainDispatcher) DecodeTransaction(req *account.DecodeTransactionReques
 	return d.registry[req.Chain].DecodeTransaction(req)
 }
 
-func (d *ChainDispatcher) VerifySignedTransaction(req *account.VerifyTransactionRequest) (*account.VerifyTransactionResponse, error) {
+func (d *ChainDispatcher) VerifySignedTransaction(ctx context.Context, req *account.VerifyTransactionRequest) (*account.VerifyTransactionResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.VerifyTransactionResponse{
@@ -272,7 +275,7 @@ func (d *ChainDispatcher) VerifySignedTransaction(req *account.VerifyTransaction
 	return d.registry[req.Chain].VerifySignedTransaction(req)
 }
 
-func (d *ChainDispatcher) GetExtraData(req *account.ExtraDataRequest) (*account.ExtraDataResponse, error) {
+func (d *ChainDispatcher) GetExtraData(ctx context.Context, req *account.ExtraDataRequest) (*account.ExtraDataResponse, error) {
 	resp := d.preHandler(req)
 	if resp != nil {
 		return &account.ExtraDataResponse{

@@ -11,3 +11,18 @@ type Eip1559DynamicFeeTx struct {
 	Amount               string `json:"amount"`
 	ContractAddress      string `json:"contract_address"`
 }
+
+type TxStructure struct {
+	ChainId         string `json:"chain_id"`
+	FromAddress     string `json:"from_address"`
+	ToAddress       string `json:"to_address"`
+	Amount          int64  `json:"amount"`
+	ContractAddress string `json:"contract_address"`
+	GasLimit        uint64 `json:"gas_limit"`
+	FeeAmount       int64  `json:"fee_amount"`
+	Memo            string `json:"memo"`
+	Decimal         int    `json:"decimal"`
+	Sequence        uint64 `json:"sequence"`
+	AccountNumber   uint64 `json:"account_number"`
+	PubKey          string `json:"pub_key"`
+}
